@@ -1,0 +1,1 @@
+export { dashboardStyles } from './styles';

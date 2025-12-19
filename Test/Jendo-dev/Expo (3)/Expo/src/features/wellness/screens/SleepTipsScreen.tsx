@@ -1,0 +1,164 @@
+import React, { useState, useEffect } from 'react';
+import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
+import { ScreenWrapper } from '../../../common/components/layout';
+import { COLORS } from '../../../config/theme.config';
+import { wellnessStyles as styles } from '../components';
+import { wellnessRecommendationApi, WellnessRecommendation } from '../services/wellnessRecommendationApi';
+import { jendoTestApi } from '../../jendo-tests/services/jendoTestApi';
+import { useAuth } from '../../../providers/AuthProvider';
+
+const getRiskColor = (level: string): string => {
+  switch (level?.toLowerCase()) {
+    case 'low': return '#4CAF50';
+    case 'moderate': return '#FF9800';
+    case 'high': return '#F44336';
+    default: return '#6B7280';
+  }
+};
+
+const getRiskBgColor = (level: string): string => {
+  switch (level?.toLowerCase()) {
+    case 'low': return '#E8F5E9';
+    case 'moderate': return '#FFF3E0';
+    case 'high': return '#FFEBEE';
+    default: return '#F5F5F5';
+  }
+};
+
+const getRiskIcon = (level: string): keyof typeof Ionicons.glyphMap => {
+  switch (level?.toLowerCase()) {
+    case 'low': return 'checkmark-circle';
+    case 'moderate': return 'warning';
+    case 'high': return 'alert-circle';
+    default: return 'help-circle';
+  }
+};
+
+export const SleepTipsScreen: React.FC = () => {
+  const router = useRouter();
+  const { user } = useAuth();
+  const [recommendations, setRecommendations] = useState<WellnessRecommendation[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [riskLevel, setRiskLevel] = useState<string>('low');
+
+  useEffect(() => {
+    loadRecommendations();
+  }, [user?.id]);
+
+  const loadRecommendations = async () => {
+    try {
+      setLoading(true);
+      const tests = await jendoTestApi.getTests(0, 1);
+      let userRiskLevel = 'low';
+      if (tests.content && tests.content.length > 0) {
+        userRiskLevel = tests.content[0].riskLevel || 'low';
+      }
+      setRiskLevel(userRiskLevel);
+      
+      const allRecs = await wellnessRecommendationApi.getByRiskLevel(userRiskLevel);
+      const lifestyleRecs = allRecs.filter(r => r.category?.toLowerCase() === 'lifestyle');
+      setRecommendations(lifestyleRecs);
+    } catch (error) {
+      console.error('Error loading sleep recommendations:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const capitalizeRiskLevel = (level: string): string => {
+    if (!level) return 'Unknown';
+    return level.charAt(0).toUpperCase() + level.slice(1).toLowerCase();
+  };
+
+  return (
+    <ScreenWrapper safeArea backgroundColor={COLORS.white}>
+      <View style={styles.headerWithBack}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+          <Ionicons name="arrow-back" size={24} color={COLORS.textPrimary} />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Sleep Tips</Text>
+        <TouchableOpacity 
+          style={styles.notificationButton}
+          onPress={() => router.push('/notifications')}
+        >
+          <Ionicons name="notifications" size={24} color={COLORS.primary} />
+          <View style={styles.notificationBadge}>
+            <Text style={styles.notificationBadgeText}>3</Text>
+          </View>
+        </TouchableOpacity>
+      </View>
+
+      <ScrollView 
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContentPadded}
+      >
+        <View style={styles.mainCard}>
+          <View style={styles.cardHeader}>
+            <View style={[styles.iconContainer, { backgroundColor: '#E3F2FD' }]}>
+              <Ionicons name="moon" size={28} color="#2196F3" />
+            </View>
+            <View style={styles.cardTitleContainer}>
+              <Text style={styles.cardTitle}>Sleep & Lifestyle Tips</Text>
+              <View style={styles.riskBadge}>
+                <View style={[styles.riskDotSmall, { backgroundColor: getRiskColor(riskLevel) }]} />
+                <Text style={[styles.riskTextSmall, { color: getRiskColor(riskLevel) }]}>
+                  {capitalizeRiskLevel(riskLevel)} Risk
+                </Text>
+              </View>
+            </View>
+          </View>
+
+          {loading ? (
+            <View style={{ padding: 40, alignItems: 'center' }}>
+              <ActivityIndicator size="large" color={COLORS.primary} />
+              <Text style={{ marginTop: 12, color: COLORS.textSecondary }}>
+                Loading personalized recommendations...
+              </Text>
+            </View>
+          ) : recommendations.length > 0 ? (
+            <View style={styles.tipsContainer}>
+              {recommendations.map((tip) => (
+                <View key={tip.id} style={[styles.tipCardColored, { backgroundColor: '#E3F2FD' }]}>
+                  <View style={styles.checkIcon}>
+                    <Ionicons name={getRiskIcon(riskLevel)} size={22} color={getRiskColor(riskLevel)} />
+                  </View>
+                  <View style={styles.tipContent}>
+                    <Text style={styles.tipTitle}>{tip.title}</Text>
+                    <Text style={styles.tipDescription}>{tip.description}</Text>
+                  </View>
+                </View>
+              ))}
+            </View>
+          ) : (
+            <View style={{ padding: 40, alignItems: 'center' }}>
+              <Ionicons name="moon-outline" size={48} color={COLORS.textMuted} />
+              <Text style={{ marginTop: 12, color: COLORS.textSecondary, textAlign: 'center' }}>
+                No lifestyle recommendations available for your current risk level.
+              </Text>
+            </View>
+          )}
+        </View>
+
+        <View style={{ 
+          backgroundColor: getRiskBgColor(riskLevel), 
+          borderRadius: 12, 
+          padding: 16, 
+          marginTop: 16 
+        }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
+            <Ionicons name="information-circle" size={20} color={getRiskColor(riskLevel)} />
+            <Text style={{ marginLeft: 8, fontWeight: '600', color: getRiskColor(riskLevel) }}>
+              Your Risk Level: {capitalizeRiskLevel(riskLevel)}
+            </Text>
+          </View>
+          <Text style={{ color: COLORS.textSecondary, fontSize: 13, lineHeight: 20 }}>
+            These lifestyle and sleep recommendations are personalized based on your latest Jendo test results. 
+            Good sleep hygiene is essential for cardiovascular health.
+          </Text>
+        </View>
+      </ScrollView>
+    </ScreenWrapper>
+  );
+};

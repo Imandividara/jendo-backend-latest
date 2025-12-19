@@ -1,0 +1,233 @@
+src/
+ └── main/
+     ├── java/
+     │   └── com.jendo.app/
+     │       ├── config/
+     │       │   ├── WebConfig.java
+     │       │   ├── SecurityConfig.java
+     │       │   └── ObjectMapperConfig.java
+     │       │
+     │       ├── common/
+     │       │   ├── exceptions/
+     │       │   │   ├── BadRequestException.java
+     │       │   │   ├── NotFoundException.java
+     │       │   │   └── GlobalExceptionHandler.java
+     │       │   │
+     │       │   ├── mapper/
+     │       │   │   ├── ObjectMapperUtils.java   // uses Jackson ObjectMapper
+     │       │   │   └── GenericMapper.java        // optional
+     │       │   │
+     │       │   ├── repository/
+     │       │   │   ├── IRepository.java          // shared CRUD
+     │       │   │   └── BaseRepositoryImpl.java   // generic implementation
+     │       │   │
+     │       │   └── dto/
+     │       │       ├── ApiResponse.java
+     │       │       └── PaginationResponse.java
+     │       │
+     │       ├── domain/
+     │       │   ├── user/
+     │       │   │   ├── entity/
+     │       │   │   │   └── User.java
+     │       │   │   ├── repository/
+     │       │   │   │   ├── IUserRepository.java        // extends IRepository
+     │       │   │   │   └── UserRepositoryImpl.java     // implements
+     │       │   │   ├── service/
+     │       │   │   │   ├── IUserService.java
+     │       │   │   │   └── UserServiceImpl.java
+     │       │   │   ├── command/
+     │       │   │   │   ├── UserRequestDto.java
+     │       │   │   │   └── UserResponseDto.java
+     │       │   │   ├── query/
+     │       │   │   │   ├── UserRequestDto.java
+     │       │   │   │   └── UserResponseDto.java
+     │       │   │   └── mapper/
+     │       │   │       └── UserMapper.java
+     │       │   │
+     │       │   ├── medicalrecord/
+     │       │   │   ├── entity/...
+     │       │   │   ├── repository/...
+     │       │   │   ├── service/...
+     │       │   │   ├── dto/...
+     │       │   │   └── mapper/...
+     │       │   │
+     │       │   ├── jendotest/
+     │       │   │   ├── entity/...
+     │       │   │   ├── repository/...
+     │       │   │   ├── service/...
+     │       │   │   ├── dto/...
+     │       │   │   └── mapper/...
+     │       │
+     │       ├── controller/
+     │       │   ├── UserController.java
+     │       │   ├── MedicalRecordController.java
+     │       │   └── JendoTestController.java
+     │       │
+     │       └── Application.java
+     │
+     └── resources/
+         ├── application.yml
+         ├── schema.sql
+         ├── data.sql
+         └── logback.xml
+Here is a clear and simple explanation of your folder structure — no code included, only purpose + how everything works together in Clean Architecture + DDD + decoupled Controller/Service/Repository + ObjectMapper.
+
+✅ Explanation of Folder Structure (Clean Architecture + DDD + Spring Boot)
+src/
+ └── main/
+     ├── java/
+     │   └── com.jendo.app/
+
+This is your main backend source folder. All backend logic lives here.
+
+🔧 1. config/
+Holds all Spring Boot configuration files.
+WebConfig.java – CORS, interceptors, formatting.
+
+
+SecurityConfig.java – Spring Security, JWT filters, authentication rules.
+
+
+ObjectMapperConfig.java – Global JSON mapping settings.
+
+
+👉 Purpose: Centralized configuration so your application stays flexible, maintainable, and clean.
+
+⚙️ 2. common/
+Contains shared utilities and base classes used across the entire application.
+▸ exceptions/
+Contains:
+Your custom error classes
+
+
+A GlobalExceptionHandler for returning readable API errors.
+
+
+👉 Purpose: Consistent error handling throughout the app.
+▸ mapper/
+ObjectMapperUtils – wraps Jackson to map objects easily.
+
+
+GenericMapper (optional) – if you want shared mapping methods.
+
+
+👉 Purpose: Avoid repeating conversion logic between Entities ↔ DTOs.
+▸ repository/
+IRepository – Generic base CRUD interface.
+
+
+BaseRepositoryImpl – Shared implementation for common CRUD logic.
+
+
+👉 Purpose:
+ Every domain module gets its own repository interface, but they all reuse the base CRUD logic → avoids duplicate code.
+▸ dto/
+ApiResponse – uniform API response wrapper.
+
+
+PaginationResponse – reusable pagination format.
+
+
+👉 Purpose: Provide consistent output from all controllers.
+
+🧩 3. domain/
+This is the heart of your clean architecture — each feature/module has its own domain folder.
+Each module contains Entity → Repository → Service → DTO → Mapper.
+Example: domain/user/
+Contains:
+▸ entity/
+User.java → your database model.
+
+
+▸ repository/
+IUserRepository → extends IRepository
+
+
+UserRepositoryImpl → implements custom user queries
+
+
+👉 Decouples your service layer from the database implementation.
+▸ service/
+IUserService → interface
+
+
+UserServiceImpl → business logic
+
+
+👉 Keeps business logic separate, makes testing easier.
+▸ command/ and query/
+You separate write operations (commands) and read operations (queries) for cleaner architecture.
+Example:
+CreateUserRequestDto (command)
+
+
+GetUserResponseDto (query)
+
+
+👉 Makes your API cleaner, scalable, and aligned with DDD & CQRS concepts.
+▸ mapper/
+UserMapper → Converts Entity ↔ DTO
+
+
+👉 Keeps controllers clean.
+
+🫀 Similarly for other domains:
+medicalrecord/
+Entity, Repository, Service, DTO, Mapper
+
+
+jendotest/
+Entity, Repository, Service, DTO, Mapper
+
+
+👉 Every domain is isolated → easy to maintain, test, and scale.
+
+🌐 4. controller/
+Holds only the REST endpoints.
+Example:
+UserController
+
+
+MedicalRecordController
+
+
+JendoTestController
+
+
+👉 Controllers only:
+Accept requests
+
+
+Call services
+
+
+Return responses
+
+
+They contain NO business logic.
+
+🚀 5. Application.java
+Your Spring Boot main class (entry point).
+
+📂 resources/
+Holds configuration & database files.
+application.yml – environment configs (DB, JWT, cloud).
+
+
+schema.sql – creates tables if needed.
+
+
+data.sql – seed initial data.
+
+
+logback.xml – logging configuration.
+
+
+👉 Purpose: Keeps infrastructure configuration separate from code.
+this is the details about the file structure. and i have given you the entity of the database structure in the svg. so give the code with all crud operations to the entity with creating all necessary other files in the structure.  use postgresql. i don't know the er diagram given links are correct. one to many like relations. give the datbles and create those links correclty.
+
+handle all exceptions and all user interactions add to a log file all of them. Use suitable library for that. 
+
+. config swagger with showing all request, response data structure. Add validations for the response data.onfig swagger to show the response body type also. because frontend developer can get idea about respponse body if there exists. do this for all swagger endpoints.  Handle exeptions and add all them to a file.
+wanna write test cases for all api requests. analyse the code and write test cases for all api in seperate file like running these test case we can ensure the validation things like wise. create test folder and write all test cases.
+Hear i attach the frontend code zip file as well create the code connect with backend but not only that endpoints create all cruds. 
