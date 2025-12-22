@@ -59,6 +59,7 @@ public class AuthController {
     }
 
     @PostMapping("/send-otp")
+    @Transactional
     @Operation(summary = "Send OTP to email", description = "Sends a one-time password to the specified email")
     public ResponseEntity<ApiResponse<Map<String, Object>>> sendOtp(@RequestBody Map<String, String> req) {
         String email = req.get("email");
@@ -176,6 +177,7 @@ public class AuthController {
     }
 
     @PostMapping("/forgot-password")
+    @Transactional
     @Operation(summary = "Request password reset", description = "Sends OTP to email for password reset")
     public ResponseEntity<ApiResponse<Map<String, Object>>> forgotPassword(@RequestBody Map<String, String> req) {
         String email = req.get("email");
