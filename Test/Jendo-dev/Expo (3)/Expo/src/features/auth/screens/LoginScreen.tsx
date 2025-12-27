@@ -84,20 +84,32 @@ export const LoginScreen: React.FC = () => {
     }
   }, []);
 
+  // Native Google Sign-In for Android/iOS
   const handleNativeGoogleLogin = async () => {
     setGoogleLoading(true);
     try {
       await GoogleSignin.hasPlayServices();
+      
+      // Sign out first to clear cached account and show account picker
+      await GoogleSignin.signOut();
+      
       const userInfo = await GoogleSignin.signIn();
       
-      if (userInfo.idToken) {
-        await loginWithGoogle({ idToken: userInfo.idToken });
+      console.log('Google Sign-In Response:', JSON.stringify(userInfo, null, 2));
+      
+      // Extract idToken from the correct path
+      const idToken = userInfo.data?.idToken;
+      
+      if (idToken) {
+        await loginWithGoogle({ idToken });
         showToast('Login successful!', 'success');
         router.replace('/(tabs)');
       } else {
-        showToast('Failed to get Google ID token', 'error');
+        console.error('No idToken in response. Full userInfo:', userInfo);
+        showToast('Failed to get Google ID token. Check SHA-1 certificates in Google Console.', 'error');
       }
     } catch (error: any) {
+      console.error('Google Sign-In Full Error:', error);
       if (error.code === statusCodes.SIGN_IN_CANCELLED) {
         showToast('Sign in cancelled', 'info');
       } else if (error.code === statusCodes.IN_PROGRESS) {
@@ -105,8 +117,7 @@ export const LoginScreen: React.FC = () => {
       } else if (error.code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) {
         showToast('Play services not available', 'error');
       } else {
-        showToast('Google sign in failed', 'error');
-        console.error('Google Sign-In Error:', error);
+        showToast(`Google sign in failed: ${error.message || 'Unknown error'}`, 'error');
       }
     } finally {
       setGoogleLoading(false);
@@ -227,14 +238,6 @@ export const LoginScreen: React.FC = () => {
         showToast(errorMessage, 'error');
       }
     }
-  };
-
-  const handleFallbackGoogleLogin = () => {
-    if (!GOOGLE_CLIENT_ID) {
-      showToast('Google Sign-In is not configured', 'info');
-      return;
-    }
-    showToast('Loading Google Sign-In...', 'info');
   };
 
   return (

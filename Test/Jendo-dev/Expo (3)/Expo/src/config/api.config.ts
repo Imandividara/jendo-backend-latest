@@ -83,7 +83,7 @@ export const ENDPOINTS = {
     UPDATE_PROFILE: '/users/me',
     HEALTH_PARAMETERS: '/user/health-parameters',
     CHANGE_PASSWORD: '/auth/change-password',
-    UPLOAD_IMAGE: '/user/profile-image',
+    UPLOAD_IMAGE: '/users/profile-image',
     DELETE_ACCOUNT: '/user/delete',
     HEALTH_SUMMARY: '/user/health-summary',
   },

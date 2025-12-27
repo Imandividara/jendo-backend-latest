@@ -41,7 +41,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       if (token) {
         try {
           const response = await authApi.getCurrentUser();
+          console.log('Auth /me response:', JSON.stringify(response, null, 2));
           if (response.user) {
+            console.log('Setting user from response:', JSON.stringify(response.user, null, 2));
             setUser(response.user as any);
             setProfileComplete(response.profileComplete || false);
             await storageService.setItem(STORAGE_KEYS.USER_DATA, JSON.stringify(response.user));

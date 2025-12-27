@@ -72,15 +72,38 @@ export const profileApi = {
     throw new Error('Current password is incorrect');
   },
 
-  uploadProfileImage: async (imageUri: string): Promise<{ imageUrl: string }> => {
-    // REAL API - Uncomment when backend is ready
-    // const formData = new FormData();
-    // formData.append('image', { uri: imageUri, name: 'profile.jpg', type: 'image/jpeg' } as any);
-    // return httpClient.post<{ imageUrl: string }>(ENDPOINTS.USER.UPLOAD_IMAGE, formData);
+  uploadProfileImage: async (imageUri: string): Promise<{ success: boolean; message: string; data: UserProfile }> => {
+    // REAL API - Upload image to backend
+    try {
+      const formData = new FormData();
+      
+      // Extract filename from URI
+      const filename = imageUri.split('/').pop() || 'profile.jpg';
+      const match = /\.(\w+)$/.exec(filename);
+      const type = match ? `image/${match[1]}` : 'image/jpeg';
+      
+      // Append image file
+      formData.append('image', {
+        uri: imageUri,
+        name: filename,
+        type: type,
+      } as any);
 
-    // DUMMY DATA - Comment out when connecting to backend
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    return { imageUrl: imageUri };
+      const response = await httpClient.post<{ success: boolean; message: string; data: UserProfile }>(
+        ENDPOINTS.USER.UPLOAD_IMAGE,
+        formData,
+        {
+          headers: {
+            'Content-Type': 'multipart/form-data',
+          },
+        }
+      );
+      
+      return response;
+    } catch (error) {
+      console.error('Upload error:', error);
+      throw error;
+    }
   },
 
   deleteAccount: async (): Promise<{ success: boolean; message: string }> => {

@@ -1,13 +1,16 @@
-import React from 'react';
-import { View, Text, ScrollView, Image, TouchableOpacity } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, ScrollView, Image, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as ImagePicker from 'expo-image-picker';
 import { ScreenWrapper } from '../../../common/components/layout';
 import { COLORS } from '../../../config/theme.config';
+import { API_CONFIG } from '../../../config/api.config';
 import { profileStyles as styles } from '../components';
 import { useAuth } from '../../../providers/AuthProvider';
 import { useUserStore } from '../../../state/userSlice';
+import { profileApi } from '../services/profileApi';
 
 const calculateBMI = (weight?: number, height?: number): { value: string; category: string; color: string } => {
   if (!weight || !height || height === 0) {
@@ -31,14 +34,153 @@ const calculateBMI = (weight?: number, height?: number): { value: string; catego
 export const ProfileScreen: React.FC = () => {
   const router = useRouter();
   const { logout } = useAuth();
-  const { user } = useUserStore();
+  const { user, updateUser } = useUserStore();
+  const [uploadingImage, setUploadingImage] = useState(false);
 
   const userName = user ? [user.firstName, user.lastName].filter(Boolean).join(' ') || 'User' : 'User';
   const userEmail = user?.email || '';
-  const userAvatar = user?.avatar || user?.profileImage;
+  
+  // Construct full image URL if it's a relative path from backend
+  const rawAvatar = user?.avatar || user?.profileImage;
+  
+  console.log('=== AVATAR DEBUG ===');
+  console.log('user:', JSON.stringify(user, null, 2));
+  console.log('rawAvatar:', rawAvatar);
+  console.log('BASE_URL:', API_CONFIG.BASE_URL);
+  
+  const userAvatar = rawAvatar?.startsWith('/uploads/') 
+    ? `${API_CONFIG.BASE_URL.replace('/api', '')}${rawAvatar}`
+    : rawAvatar;
+  
+  console.log('userAvatar:', userAvatar);
+  console.log('==================');
+  
   const defaultAvatar = 'https://ui-avatars.com/api/?name=' + encodeURIComponent(userName) + '&background=7B2D8E&color=fff&size=200';
 
   const bmiData = calculateBMI(user?.weight, user?.height);
+
+  const handleSelectProfileImage = async () => {
+    console.log('Camera button clicked!');
+    try {
+      // Show options: Take Photo or Choose from Library
+      Alert.alert(
+        'Profile Photo',
+        'Choose an option',
+        [
+          {
+            text: 'Take Photo',
+            onPress: handleTakePhoto,
+          },
+          {
+            text: 'Choose from Library',
+            onPress: handlePickImage,
+          },
+          {
+            text: 'Cancel',
+            style: 'cancel',
+          },
+        ]
+      );
+    } catch (error: any) {
+      console.error('Error showing picker options:', error);
+      Alert.alert('Error', 'Failed to show options: ' + (error?.message || 'Unknown error'));
+    }
+  };
+
+  const handleTakePhoto = async () => {
+    console.log('Launching camera...');
+    try {
+      const cameraPermission = await ImagePicker.requestCameraPermissionsAsync();
+      console.log('Camera permission result:', cameraPermission);
+      
+      if (!cameraPermission.granted) {
+        Alert.alert('Permission Required', 'Please allow camera access to take a photo.');
+        return;
+      }
+
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.3, // Lower quality for smaller file size (under 1MB)
+      });
+
+      console.log('Camera result:', result);
+
+      if (!result.canceled && result.assets[0]) {
+        await uploadProfileImage(result.assets[0].uri);
+      }
+    } catch (error: any) {
+      console.error('Error taking photo:', error);
+      Alert.alert('Error', 'Failed to take photo: ' + (error?.message || 'Unknown error'));
+    }
+  };
+
+  const handlePickImage = async () => {
+    console.log('Launching image picker...');
+    try {
+      // Request permission first
+      const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      console.log('Permission result:', permissionResult);
+      
+      if (!permissionResult.granted) {
+        Alert.alert('Permission Required', 'Please allow access to your photo library to upload a profile picture.');
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.3, // Lower quality for smaller file size (under 1MB)
+      });
+
+      console.log('Image picker result:', result);
+
+      if (!result.canceled && result.assets[0]) {
+        await uploadProfileImage(result.assets[0].uri);
+      }
+    } catch (error: any) {
+      console.error('Error picking image:', error);
+      Alert.alert('Error', 'Failed to pick image: ' + (error?.message || 'Unknown error'));
+    }
+  };
+
+  const uploadProfileImage = async (imageUri: string) => {
+    try {
+      setUploadingImage(true);
+      
+      // Check file size (this won't work for all URIs, but helps for debugging)
+      console.log('Uploading image from:', imageUri);
+      
+      const response = await profileApi.uploadProfileImage(imageUri);
+      
+      // Update entire user object to prevent losing other fields
+      // Response is wrapped in ApiResponse, actual user data is in response.data
+      if (response?.data) {
+        updateUser(response.data);
+      }
+      
+      Alert.alert('Success', 'Profile photo updated successfully!');
+    } catch (error: any) {
+      console.error('Error uploading image:', error);
+      console.error('Error response:', error?.response?.data);
+      
+      if (error?.response?.status === 413) {
+        Alert.alert(
+          'File Too Large', 
+          'The image is too large. Please try a different photo or contact support if this persists.'
+        );
+      } else if (error?.response?.status === 500) {
+        const errorMessage = error?.response?.data?.message || error?.response?.data?.error || 'Server error occurred';
+        Alert.alert('Server Error', `Failed to upload: ${errorMessage}\n\nThe server may need to be updated with the latest code.`);
+      } else {
+        Alert.alert('Error', 'Failed to upload profile photo: ' + (error?.message || 'Unknown error'));
+      }
+    } finally {
+      setUploadingImage(false);
+    }
+  };
 
   const handleLogout = async () => {
     try {
@@ -67,8 +209,16 @@ export const ProfileScreen: React.FC = () => {
         <View style={styles.profileSection}>
           <View style={styles.avatarContainer}>
             <Image source={{ uri: userAvatar || defaultAvatar }} style={styles.profileAvatar} />
-            <TouchableOpacity style={styles.cameraButton}>
-              <Ionicons name="camera" size={14} color={COLORS.white} />
+            <TouchableOpacity 
+              style={styles.cameraButton}
+              onPress={handleSelectProfileImage}
+              disabled={uploadingImage}
+            >
+              {uploadingImage ? (
+                <ActivityIndicator size="small" color={COLORS.white} />
+              ) : (
+                <Ionicons name="camera" size={14} color={COLORS.white} />
+              )}
             </TouchableOpacity>
           </View>
           <Text style={styles.userName}>{userName}</Text>

@@ -15,17 +15,24 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 import org.springframework.security.core.Authentication;
+import java.io.IOException;
+import java.util.Map;
+import com.cloudinary.Cloudinary;
+import com.cloudinary.utils.ObjectUtils;
 
 @RestController
 @RequestMapping("/api/users")
 @RequiredArgsConstructor
 @Tag(name = "Users", description = "User management APIs")
-public class UserController {
 
+public class UserController {
     private final UserService userService;
+    private final Cloudinary cloudinary;
 
     @PostMapping
     @Operation(summary = "Create a new user", description = "Creates a new user with the provided details")
@@ -117,5 +124,53 @@ public class UserController {
     public ResponseEntity<Void> deleteUser(@PathVariable Long id) {
         userService.deleteUser(id);
         return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping(value = "/profile-image", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @Operation(summary = "Upload profile image", description = "Uploads a profile image for the current user")
+    public ResponseEntity<ApiResponse<UserResponseDto>> uploadProfileImage(
+            Authentication authentication,
+            @RequestParam("image") MultipartFile file) {
+        try {
+            // Validate file
+            if (file.isEmpty()) {
+                return ResponseEntity.badRequest()
+                        .body(ApiResponse.error("Please select a file to upload"));
+            }
+
+            // Check file type
+            String contentType = file.getContentType();
+            if (contentType == null || !contentType.startsWith("image/")) {
+                return ResponseEntity.badRequest()
+                        .body(ApiResponse.error("Only image files are allowed"));
+            }
+
+            // Check file size (max 5MB)
+            if (file.getSize() > 5 * 1024 * 1024) {
+                return ResponseEntity.badRequest()
+                        .body(ApiResponse.error("File size must not exceed 5MB"));
+            }
+
+            // Upload to Cloudinary
+            Map uploadResult = cloudinary.uploader().upload(file.getBytes(), ObjectUtils.emptyMap());
+            String imageUrl = (String) uploadResult.get("secure_url");
+
+            // Update user profile with new image URL
+            String email = authentication.getName();
+            UserResponseDto currentUser = userService.getUserByEmail(email);
+            UserUpdateDto updateDto = UserUpdateDto.builder()
+                    .profileImage(imageUrl)
+                    .build();
+            UserResponseDto updatedUser = userService.updateUser(currentUser.getId(), updateDto);
+
+            // Return updated user object with success message
+            return ResponseEntity.ok(ApiResponse.success(updatedUser, "Profile image uploaded successfully"));
+        } catch (IOException e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(ApiResponse.error("Failed to upload file: " + e.getMessage()));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(ApiResponse.error("Failed to upload to Cloudinary: " + e.getMessage()));
+        }
     }
 }
