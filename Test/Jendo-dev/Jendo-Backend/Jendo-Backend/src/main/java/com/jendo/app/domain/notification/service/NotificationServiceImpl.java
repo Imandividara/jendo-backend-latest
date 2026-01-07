@@ -57,12 +57,14 @@ public class NotificationServiceImpl implements NotificationService {
         return notificationMapper.toResponseDto(notification);
     }
 
+    private static final List<String> EXCLUDED_NOTIFICATION_TYPES = List.of("WELLNESS_TIP", "SYSTEM");
+
     @Override
     @Transactional(readOnly = true)
     public PaginationResponse<NotificationResponseDto> getNotificationsByUserId(Long userId, int page, int size) {
         logger.info("Fetching notifications for user ID: {} - page: {}, size: {}", userId, page, size);
-        Pageable pageable = PageRequest.of(page, size, Sort.by("createdAt").descending());
-        Page<Notification> notificationPage = notificationRepository.findByUserId(userId, pageable);
+        Pageable pageable = PageRequest.of(page, size);
+        Page<Notification> notificationPage = notificationRepository.findByUserIdAndTypeNotInOrderByCreatedAtDesc(userId, EXCLUDED_NOTIFICATION_TYPES, pageable);
         
         List<NotificationResponseDto> content = notificationPage.getContent().stream()
                 .map(notificationMapper::toResponseDto)
@@ -83,14 +85,14 @@ public class NotificationServiceImpl implements NotificationService {
     @Transactional(readOnly = true)
     public List<NotificationResponseDto> getUnreadNotificationsByUserId(Long userId) {
         logger.info("Fetching unread notifications for user ID: {}", userId);
-        List<Notification> notifications = notificationRepository.findByUserIdAndIsReadFalse(userId);
+        List<Notification> notifications = notificationRepository.findByUserIdAndIsReadFalseAndTypeNotIn(userId, EXCLUDED_NOTIFICATION_TYPES);
         return notifications.stream().map(notificationMapper::toResponseDto).collect(Collectors.toList());
     }
 
     @Override
     @Transactional(readOnly = true)
     public long getUnreadCountByUserId(Long userId) {
-        return notificationRepository.countByUserIdAndIsReadFalse(userId);
+        return notificationRepository.countByUserIdAndIsReadFalseAndTypeNotIn(userId, EXCLUDED_NOTIFICATION_TYPES);
     }
 
     @Override
@@ -106,7 +108,7 @@ public class NotificationServiceImpl implements NotificationService {
     @Override
     public void markAllAsRead(Long userId) {
         logger.info("Marking all notifications as read for user ID: {}", userId);
-        List<Notification> notifications = notificationRepository.findByUserIdAndIsReadFalse(userId);
+        List<Notification> notifications = notificationRepository.findByUserIdAndIsReadFalseAndTypeNotIn(userId, EXCLUDED_NOTIFICATION_TYPES);
         notifications.forEach(n -> n.setIsRead(true));
         notificationRepository.saveAll(notifications);
     }
@@ -122,7 +124,21 @@ public class NotificationServiceImpl implements NotificationService {
 
     @Override
     public NotificationResponseDto saveReceivedNotification(NotificationReceiveDto request) {
-        logger.info("Saving Firebase notification for user ID: {} - Message: {}", request.getUserId(), request.getMessage());
+        logger.info("Received Firebase notification for user ID: {} - Type: {} - Message: {}", 
+                request.getUserId(), request.getType(), request.getMessage());
+
+        // Don't save SYSTEM or WELLNESS_TIP notifications to the database
+        String notificationType = request.getType() != null ? request.getType() : "SYSTEM";
+        if (EXCLUDED_NOTIFICATION_TYPES.contains(notificationType)) {
+            logger.info("Skipping save for excluded notification type: {}", notificationType);
+            // Return a dummy response without saving
+            return NotificationResponseDto.builder()
+                    .userId(request.getUserId())
+                    .message(request.getMessage())
+                    .type(notificationType)
+                    .isRead(false)
+                    .build();
+        }
 
         User user = userRepository.findById(request.getUserId())
                 .orElseThrow(() -> new NotFoundException("User", request.getUserId()));
@@ -130,7 +146,7 @@ public class NotificationServiceImpl implements NotificationService {
         Notification notification = Notification.builder()
                 .user(user)
                 .message(request.getMessage())
-                .type(request.getType() != null ? request.getType() : "SYSTEM")
+                .type(notificationType)
                 .isRead(false)
                 .build();
 

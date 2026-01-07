@@ -1,13 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, ScrollView, ActivityIndicator, TouchableOpacity, Dimensions, Linking, Platform, Alert } from 'react-native';
+import { View, Text, ScrollView, ActivityIndicator, TouchableOpacity, Linking, Platform, Alert, StyleSheet } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { ScreenWrapper } from '../../../common/components/layout';
 import { COLORS } from '../../../config/theme.config';
 import { jendoReportApi, JendoReport } from '../services/jendoReportApi';
-import { useAuth } from '../../../providers/AuthProvider';
-
-const screenWidth = Dimensions.get('window').width;
+import Pdf from 'react-native-pdf';
+import { WebView } from 'react-native-webview';
 
 const formatDate = (dateString: string) => {
   const date = new Date(dateString);
@@ -30,10 +29,10 @@ const formatFileSize = (bytes: number): string => {
 export const JendoReportDetailScreen: React.FC = () => {
   const { id } = useLocalSearchParams();
   const router = useRouter();
-  const { user } = useAuth();
   const [report, setReport] = useState<JendoReport | null>(null);
   const [loading, setLoading] = useState(true);
   const [downloading, setDownloading] = useState(false);
+  const [pdfError, setPdfError] = useState<string | null>(null);
 
   useEffect(() => {
     loadReportDetails();
@@ -55,29 +54,6 @@ export const JendoReportDetailScreen: React.FC = () => {
       router.back();
     } finally {
       setLoading(false);
-    }
-  };
-
-  const handleViewPDF = async () => {
-    if (!report) return;
-    
-    try {
-      const downloadUrl = jendoReportApi.getDownloadUrl(report.id);
-      
-      // Open PDF for viewing (opens in browser on web, in PDF viewer on mobile)
-      if (Platform.OS === 'web') {
-        window.open(downloadUrl, '_blank');
-      } else {
-        const canOpen = await Linking.canOpenURL(downloadUrl);
-        if (canOpen) {
-          await Linking.openURL(downloadUrl);
-        } else {
-          Alert.alert('Error', 'Cannot open PDF viewer. Please ensure you have a PDF reader installed.');
-        }
-      }
-    } catch (error) {
-      console.error('View PDF error:', error);
-      Alert.alert('Error', 'Failed to open PDF. Please try again.');
     }
   };
 
@@ -139,21 +115,60 @@ export const JendoReportDetailScreen: React.FC = () => {
     return null;
   }
 
+  const pdfSourceUri = jendoReportApi.getDownloadUrl(report.id);
+
+  const renderPdfViewer = () => {
+    if (pdfError) {
+      return (
+        <View style={styles.pdfErrorContainer}>
+          <Ionicons name="warning" size={20} color="#B91C1C" />
+          <Text style={styles.pdfErrorTitle}>Unable to load preview</Text>
+          <Text style={styles.pdfErrorText}>{pdfError}</Text>
+        </View>
+      );
+    }
+
+    if (Platform.OS === 'web') {
+      return (
+        <WebView
+          originWhitelist={["*"]}
+          source={{ uri: pdfSourceUri }}
+          startInLoadingState
+          renderLoading={() => (
+            <ActivityIndicator style={styles.pdfLoader} color={COLORS.primary} />
+          )}
+          onError={(syntheticEvent) => {
+            console.error('Web PDF render error:', syntheticEvent.nativeEvent);
+            setPdfError('Preview is unavailable. Use the download button below.');
+          }}
+          style={styles.pdf}
+        />
+      );
+    }
+
+    return (
+      <Pdf
+        trustAllCerts={false}
+        source={{ uri: pdfSourceUri, cache: true }}
+        renderActivityIndicator={() => (
+          <ActivityIndicator style={styles.pdfLoader} color={COLORS.primary} />
+        )}
+        onError={(error) => {
+          console.error('PDF render error:', error);
+          setPdfError('Preview is unavailable. Use the download button below.');
+        }}
+        style={styles.pdf}
+      />
+    );
+  };
+
   return (
     <ScreenWrapper safeArea backgroundColor="#FFFFFF">
-      <View style={{
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        paddingHorizontal: 16,
-        paddingVertical: 12,
-      }}>
+      <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()}>
           <Ionicons name="arrow-back" size={24} color={COLORS.primary} />
         </TouchableOpacity>
-        <Text style={{ fontSize: 20, fontWeight: '700', color: '#1F2937' }}>
-          Report Details
-        </Text>
+        <Text style={styles.headerTitle}>Report Details</Text>
         <TouchableOpacity onPress={() => router.push('/notifications')}>
           <Ionicons name="notifications" size={24} color={COLORS.primary} />
         </TouchableOpacity>
@@ -163,68 +178,48 @@ export const JendoReportDetailScreen: React.FC = () => {
         contentContainerStyle={{ padding: 16 }}
         showsVerticalScrollIndicator={false}
       >
-        {/* PDF Preview Card */}
-        <View style={{ 
-          borderWidth: 1, 
-          borderColor: '#E5E7EB', 
-          borderRadius: 16, 
-          padding: 20, 
-          marginBottom: 20,
-          backgroundColor: '#FAFAFA',
-          alignItems: 'center',
-        }}>
-          <MaterialCommunityIcons name="file-pdf-box" size={80} color="#EF4444" />
-          <Text style={{ fontSize: 18, fontWeight: '600', color: '#1F2937', marginTop: 16, textAlign: 'center' }}>
-            Jendo Vascular Health Report
-          </Text>
-          <Text style={{ fontSize: 14, color: '#6B7280', marginTop: 8 }}>
-            {formatFileSize(report.fileSize)}
-          </Text>
+        <View style={styles.pdfContainer}>
+          {renderPdfViewer()}
         </View>
+        <Text style={styles.pdfTitle}>Jendo Vascular Health Report</Text>
+        <Text style={styles.pdfMeta}>{formatFileSize(report.fileSize)}</Text>
 
         {/* Report Information */}
-        <View style={{ 
-          borderWidth: 1, 
-          borderColor: '#E5E7EB', 
-          borderRadius: 12, 
-          padding: 16, 
-          marginBottom: 20,
-          backgroundColor: '#FFFFFF',
-        }}>
-          <Text style={{ fontSize: 16, fontWeight: '600', color: '#1F2937', marginBottom: 16 }}>
+        <View style={styles.infoCard}>
+          <Text style={styles.sectionTitle}>
             Report Information
           </Text>
           
-          <View style={{ marginBottom: 12 }}>
-            <Text style={{ fontSize: 12, color: '#6B7280', marginBottom: 4 }}>Report ID:</Text>
-            <Text style={{ fontSize: 14, fontWeight: '500', color: '#1F2937' }}>#{report.id}</Text>
+          <View style={styles.infoRow}>
+            <Text style={styles.infoLabel}>Report ID:</Text>
+            <Text style={styles.infoValue}>#{report.id}</Text>
           </View>
 
-          <View style={{ marginBottom: 12 }}>
-            <Text style={{ fontSize: 12, color: '#6B7280', marginBottom: 4 }}>Uploaded On:</Text>
-            <Text style={{ fontSize: 14, fontWeight: '500', color: '#1F2937' }}>
+          <View style={styles.infoRow}>
+            <Text style={styles.infoLabel}>Uploaded On:</Text>
+            <Text style={styles.infoValue}>
               {formatDate(report.uploadedAt)}
             </Text>
           </View>
 
-          <View style={{ marginBottom: 12 }}>
-            <Text style={{ fontSize: 12, color: '#6B7280', marginBottom: 4 }}>File Name:</Text>
-            <Text style={{ fontSize: 14, fontWeight: '500', color: '#1F2937' }}>
+          <View style={styles.infoRow}>
+            <Text style={styles.infoLabel}>File Name:</Text>
+            <Text style={styles.infoValue}>
               {report.fileName}
             </Text>
           </View>
 
-          <View style={{ marginBottom: 12 }}>
-            <Text style={{ fontSize: 12, color: '#6B7280', marginBottom: 4 }}>File Type:</Text>
-            <Text style={{ fontSize: 14, fontWeight: '500', color: '#1F2937' }}>
+          <View style={styles.infoRow}>
+            <Text style={styles.infoLabel}>File Type:</Text>
+            <Text style={styles.infoValue}>
               {report.contentType}
             </Text>
           </View>
 
           {report.description && (
             <View>
-              <Text style={{ fontSize: 12, color: '#6B7280', marginBottom: 4 }}>Description:</Text>
-              <Text style={{ fontSize: 14, fontWeight: '500', color: '#1F2937', lineHeight: 20 }}>
+              <Text style={styles.infoLabel}>Description:</Text>
+              <Text style={styles.infoValue}>
                 {report.description}
               </Text>
             </View>
@@ -232,62 +227,30 @@ export const JendoReportDetailScreen: React.FC = () => {
         </View>
 
         {/* Important Notice */}
-        <View style={{ 
-          backgroundColor: '#DBEAFE', 
-          borderRadius: 12, 
-          padding: 16, 
-          marginBottom: 20,
-        }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
+        <View style={styles.noticeCard}>
+          <View style={styles.noticeHeader}>
             <Ionicons name="information-circle" size={20} color="#1E40AF" />
-            <Text style={{ fontSize: 12, fontWeight: '600', color: '#1E40AF', marginLeft: 8 }}>
+            <Text style={styles.noticeTitle}>
               Important Information
             </Text>
           </View>
-          <Text style={{ fontSize: 11, color: '#1E40AF', lineHeight: 16 }}>
+          <Text style={styles.noticeText}>
             This is an official Jendo health report. Please consult with a qualified healthcare professional 
             for proper interpretation and medical advice regarding the contents of this report.
           </Text>
         </View>
 
-        {/* Action Buttons */}
-        <TouchableOpacity
-          onPress={handleViewPDF}
-          style={{
-            backgroundColor: COLORS.primary,
-            borderRadius: 12,
-            paddingVertical: 16,
-            flexDirection: 'row',
-            alignItems: 'center',
-            justifyContent: 'center',
-            marginBottom: 12,
-          }}
-        >
-          <MaterialCommunityIcons name="eye" size={20} color="#FFFFFF" />
-          <Text style={{ color: '#FFFFFF', fontSize: 16, fontWeight: '600', marginLeft: 8 }}>
-            View PDF Report
-          </Text>
-        </TouchableOpacity>
-
         <TouchableOpacity
           onPress={handleDownload}
           disabled={downloading}
-          style={{
-            backgroundColor: '#10B981',
-            borderRadius: 12,
-            paddingVertical: 16,
-            flexDirection: 'row',
-            alignItems: 'center',
-            justifyContent: 'center',
-            marginBottom: 30,
-          }}
+          style={styles.downloadButton}
         >
           {downloading ? (
             <ActivityIndicator size="small" color="#FFFFFF" />
           ) : (
             <>
               <MaterialCommunityIcons name="download" size={20} color="#FFFFFF" />
-              <Text style={{ color: '#FFFFFF', fontSize: 16, fontWeight: '600', marginLeft: 8 }}>
+              <Text style={styles.downloadText}>
                 Download Report
               </Text>
             </>
@@ -297,3 +260,135 @@ export const JendoReportDetailScreen: React.FC = () => {
     </ScreenWrapper>
   );
 };
+
+const styles = StyleSheet.create({
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#1F2937',
+  },
+  pdfContainer: {
+    height: 450,
+    width: '100%',
+    borderRadius: 16,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    backgroundColor: '#F3F4F6',
+    marginBottom: 12,
+  },
+  pdf: {
+    flex: 1,
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#F3F4F6',
+  },
+  pdfLoader: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  pdfErrorContainer: {
+    flex: 1,
+    padding: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  pdfErrorTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#111827',
+  },
+  pdfErrorText: {
+    fontSize: 12,
+    color: '#6B7280',
+    textAlign: 'center',
+  },
+  pdfTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#1F2937',
+    marginTop: 8,
+    textAlign: 'center',
+  },
+  pdfMeta: {
+    fontSize: 14,
+    color: '#6B7280',
+    marginTop: 4,
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  infoCard: {
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 20,
+    backgroundColor: '#FFFFFF',
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1F2937',
+    marginBottom: 16,
+  },
+  infoRow: {
+    marginBottom: 12,
+  },
+  infoLabel: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginBottom: 4,
+  },
+  infoValue: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#1F2937',
+    lineHeight: 20,
+  },
+  noticeCard: {
+    backgroundColor: '#DBEAFE',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 20,
+  },
+  noticeHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  noticeTitle: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#1E40AF',
+    marginLeft: 8,
+  },
+  noticeText: {
+    fontSize: 11,
+    color: '#1E40AF',
+    lineHeight: 16,
+  },
+  downloadButton: {
+    backgroundColor: '#10B981',
+    borderRadius: 12,
+    paddingVertical: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 30,
+  },
+  downloadText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+    marginLeft: 8,
+  },
+});

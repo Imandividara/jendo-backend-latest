@@ -131,11 +131,11 @@ export const WellnessScreen: React.FC = () => {
                         style={{
                           width: 240,
                           marginRight: 12,
-                          backgroundColor: category.palette.bg,
+                          backgroundColor: COLORS.white,
                           borderRadius: 16,
                           padding: 14,
                           borderWidth: 1,
-                          borderColor: category.palette.text + '30',
+                          borderColor: COLORS.borderLight,
                         }}
                         onPress={() =>
                           router.push({

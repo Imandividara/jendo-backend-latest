@@ -98,6 +98,24 @@ public class DoctorServiceImpl implements DoctorService {
         if (request.getAddress() != null) doctor.setAddress(request.getAddress());
         if (request.getIsAvailable() != null) doctor.setIsAvailable(request.getIsAvailable());
         if (request.getAvailableDays() != null) doctor.setAvailableDays(request.getAvailableDays());
+        // Replace consultation fees if provided in request
+        if (request.getConsultationFees() != null) {
+            if (doctor.getConsultationFees() == null) {
+                doctor.setConsultationFees(new java.util.ArrayList<>());
+            } else {
+                doctor.getConsultationFees().clear();
+            }
+            for (com.jendo.app.domain.consultationfee.dto.ConsultationFeeRequestDto feeDto : request.getConsultationFees()) {
+                com.jendo.app.domain.consultationfee.entity.ConsultationFee fee =
+                        com.jendo.app.domain.consultationfee.entity.ConsultationFee.builder()
+                                .feeType(feeDto.getFeeType())
+                                .amount(feeDto.getAmount())
+                                .currency(feeDto.getCurrency())
+                                .doctor(doctor)
+                                .build();
+                doctor.getConsultationFees().add(fee);
+            }
+        }
         
         doctor = doctorRepository.save(doctor);
         logger.info("Doctor updated successfully with ID: {}", id);

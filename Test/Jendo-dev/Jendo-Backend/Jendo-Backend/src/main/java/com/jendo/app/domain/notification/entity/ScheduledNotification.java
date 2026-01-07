@@ -45,6 +45,12 @@ public class ScheduledNotification {
     @Column(name = "data", columnDefinition = "TEXT")
     private String data;
 
+    @Column(name = "category")
+    private String category;
+
+    @Column(name = "tip_content", columnDefinition = "TEXT")
+    private String tipContent;
+
     @Column(name = "created_at")
     private LocalDateTime createdAt;
 

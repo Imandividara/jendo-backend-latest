@@ -13,4 +13,8 @@ public interface ScheduledNotificationRepository extends JpaRepository<Scheduled
     List<ScheduledNotification> findByScheduledForBeforeAndSentFalse(LocalDateTime now);
 
     void deleteByAppointment_Id(Long appointmentId);
+    
+    void deleteByUserIdAndTypeAndSentFalse(Long userId, String type);
+    
+    List<ScheduledNotification> findByUserIdAndType(Long userId, String type);
 }

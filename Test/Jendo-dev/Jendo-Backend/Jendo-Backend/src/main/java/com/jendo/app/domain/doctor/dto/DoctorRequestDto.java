@@ -1,5 +1,6 @@
 package com.jendo.app.domain.doctor.dto;
 
+import com.jendo.app.domain.consultationfee.dto.ConsultationFeeRequestDto;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
@@ -8,6 +9,8 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+
+import java.util.List;
 
 @Data
 @Builder
@@ -51,4 +54,7 @@ public class DoctorRequestDto {
 
     @Schema(description = "Available days", example = "Monday, Wednesday, Friday")
     private String availableDays;
+
+    @Schema(description = "Consultation fees for the doctor")
+    private List<ConsultationFeeRequestDto> consultationFees;
 }

@@ -1,11 +1,13 @@
 package com.jendo.app.domain.doctor.mapper;
 
+import com.jendo.app.domain.consultationfee.dto.ConsultationFeeRequestDto;
 import com.jendo.app.domain.consultationfee.entity.ConsultationFee;
 import com.jendo.app.domain.doctor.dto.DoctorRequestDto;
 import com.jendo.app.domain.doctor.dto.DoctorResponseDto;
 import com.jendo.app.domain.doctor.entity.Doctor;
 import org.springframework.stereotype.Component;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.stream.Collectors;
 
@@ -13,7 +15,7 @@ import java.util.stream.Collectors;
 public class DoctorMapper {
 
     public Doctor toEntity(DoctorRequestDto dto) {
-        return Doctor.builder()
+                Doctor doctor = Doctor.builder()
                 .name(dto.getName())
                 .specialty(dto.getSpecialty())
                 .hospital(dto.getHospital())
@@ -25,6 +27,26 @@ public class DoctorMapper {
                 .isAvailable(dto.getIsAvailable() != null ? dto.getIsAvailable() : true)
                 .availableDays(dto.getAvailableDays())
                 .build();
+
+                // Map consultation fees if provided
+                if (dto.getConsultationFees() != null && !dto.getConsultationFees().isEmpty()) {
+                        if (doctor.getConsultationFees() == null) {
+                                doctor.setConsultationFees(new ArrayList<>());
+                        } else {
+                                doctor.getConsultationFees().clear();
+                        }
+                        for (ConsultationFeeRequestDto feeDto : dto.getConsultationFees()) {
+                                ConsultationFee fee = ConsultationFee.builder()
+                                                .feeType(feeDto.getFeeType())
+                                                .amount(feeDto.getAmount())
+                                                .currency(feeDto.getCurrency())
+                                                .doctor(doctor)
+                                                .build();
+                                doctor.getConsultationFees().add(fee);
+                        }
+                }
+
+                return doctor;
     }
 
     public DoctorResponseDto toResponseDto(Doctor entity) {

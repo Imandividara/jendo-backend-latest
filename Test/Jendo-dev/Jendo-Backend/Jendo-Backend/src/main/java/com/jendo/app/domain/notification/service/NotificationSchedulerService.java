@@ -38,6 +38,12 @@ public class NotificationSchedulerService {
                 notification.setSent(true);
                 notification.setSentAt(LocalDateTime.now());
                 scheduledNotificationRepository.save(notification);
+                
+                // Delete wellness tips after sending
+                if ("WELLNESS_TIP".equals(notification.getType())) {
+                    scheduledNotificationRepository.delete(notification);
+                    log.info("Deleted wellness tip notification ID: {} after sending", notification.getId());
+                }
             } catch (Exception e) {
                 log.error("Error sending notification ID: {}", notification.getId(), e);
             }

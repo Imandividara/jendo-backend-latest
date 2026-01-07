@@ -13,6 +13,7 @@ import com.jendo.app.domain.wellnessrecommendation.entity.WellnessRecommendation
 import com.jendo.app.domain.wellnessrecommendation.repository.DailyAiTipRepository;
 import com.jendo.app.domain.wellnessrecommendation.repository.WellnessRecommendationRepository;
 import com.jendo.app.domain.user.repository.UserRepository;
+import com.jendo.app.domain.notification.service.WellnessTipNotificationService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -49,6 +50,7 @@ public class WellnessRecommendationServiceImpl implements WellnessRecommendation
     private final DailyAiTipRepository dailyAiTipRepository;
     private final ObjectMapper objectMapper;
     private final UserRepository userRepository;
+    private final WellnessTipNotificationService wellnessTipNotificationService;
 
     @Value("${groq.api.key:}")
     private String groqApiKey;
@@ -154,10 +156,10 @@ public class WellnessRecommendationServiceImpl implements WellnessRecommendation
             log.info("No Jendo test found for user {}, returning general wellness tips", userId);
             return generateDefaultTips();
         }
-
-        Map<String, List<WellnessRecommendationDto>> generated = generateAiTips(latestTest.get(), window.start());
-        persistPayload(userId, window, generated);
-        return generated;
+        // Jendo test exists but no cached tips for current window: return preload/default tips
+        // Frontend will show these until next 6 AM; scheduled jobs will generate tips for the next window.
+        log.info("User {} has Jendo test but no cached tips for current window; returning preload tips", userId);
+        return generateDefaultTips();
     }
 
     @Override
@@ -191,11 +193,27 @@ public class WellnessRecommendationServiceImpl implements WellnessRecommendation
                 skippedNoTest++;
                 continue;
             }
+
+            // If the user's latest test was created after current window start, defer tips until next window
+            if (latestTest.get().getCreatedAt() != null && latestTest.get().getCreatedAt().isAfter(window.start())) {
+                log.debug("User {} latest test created at {} > window start {}, deferring tips until next 6 AM",
+                        userId, latestTest.get().getCreatedAt(), window.start());
+                skippedNoTest++; // treat as skip for this window
+                continue;
+            }
             
             try {
                 log.info("Generating AI tips for user {}", userId);
                 Map<String, List<WellnessRecommendationDto>> tips = generateAiTips(latestTest.get(), window.start());
                 persistPayload(userId, window, tips);
+                
+                // Schedule wellness tip notifications
+                try {
+                    wellnessTipNotificationService.scheduleWellnessTipsForUser(userId, tips);
+                } catch (Exception e) {
+                    log.error("Failed to schedule wellness tip notifications for user {}", userId, e);
+                }
+                
                 generated++;
                 log.info("Successfully generated tips for user {}", userId);
             } catch (Exception ex) {
