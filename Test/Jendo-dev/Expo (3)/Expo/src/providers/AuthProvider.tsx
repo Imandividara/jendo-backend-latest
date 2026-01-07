@@ -42,30 +42,38 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   }, []);
 
   const checkAuthState = async () => {
+    const withTimeout = <T,>(promise: Promise<T>, ms = 5000) =>
+      Promise.race([
+        promise,
+        new Promise<never>((_, reject) => 
+          setTimeout(() => reject(new Error(`Timeout after ${ms}ms`)), ms)
+        )
+      ]);
+
     try {
       const token = await storageService.getItem(STORAGE_KEYS.AUTH_TOKEN);
       
       if (token) {
         try {
-          const response = await authApi.getCurrentUser();
+          const response = await withTimeout(authApi.getCurrentUser(), 5000);
           console.log('Auth /me response:', JSON.stringify(response, null, 2));
-          if (response.user) {
+          if (response?.user) {
             console.log('Setting user from response:', JSON.stringify(response.user, null, 2));
             setUser(response.user as any);
             setProfileComplete(response.profileComplete || false);
             await storageService.setItem(STORAGE_KEYS.USER_DATA, JSON.stringify(response.user));
           }
-        } catch (error) {
-          console.log('Token validation failed, attempting refresh...');
+        } catch (error: any) {
+          console.warn('⚠️ Auth check failed:', error?.message || error);
           try {
-            const refreshResponse = await authApi.refreshToken();
-            if (refreshResponse.user) {
+            const refreshResponse = await withTimeout(authApi.refreshToken(), 5000);
+            if (refreshResponse?.user) {
               setUser(refreshResponse.user as any);
               setProfileComplete(refreshResponse.profileComplete || false);
               await storageService.setItem(STORAGE_KEYS.USER_DATA, JSON.stringify(refreshResponse.user));
             }
           } catch (refreshError) {
-            console.log('Token refresh failed, clearing auth state');
+            console.warn('⚠️ Refresh failed, clearing auth state');
             await clearAuthData();
           }
         }

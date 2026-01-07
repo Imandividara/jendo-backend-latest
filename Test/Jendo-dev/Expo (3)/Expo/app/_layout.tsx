@@ -50,31 +50,49 @@ function RootLayoutContent() {
   useEffect(() => {
     if (user?.id) {
       console.log('👤 User logged in, initializing push notifications');
-      AsyncStorage.setItem('userId', String(user.id));
-      initPushForUser(user.id);
+      AsyncStorage.setItem('userId', String(user.id)).catch(() => {});
+      // Fire-and-forget, do not block splash/UI
+      initPushForUser(user.id).catch((e: any) => 
+        console.warn('Push init failed:', e?.message || e)
+      );
     }
   }, [user?.id]);
 
   // ✅ Setup database and notification handler
   useEffect(() => {
     const setupApp = async () => {
+      const withTimeout = <T,>(promise: Promise<T>, ms = 3000) =>
+        Promise.race([
+          promise,
+          new Promise<never>((_, reject) => 
+            setTimeout(() => reject(new Error(`Timeout after ${ms}ms`)), ms)
+          )
+        ]);
+
       try {
-        await database.initialize();
+        // DB init should not block rendering
+        await withTimeout(database.initialize(), 3000).catch((e: any) =>
+          console.warn('DB init non-blocking failure:', e?.message || e)
+        );
         
         // Set notification handler
-        Notifications.setNotificationHandler({
-          handleNotification: async () => ({
-            shouldShowAlert: true,
-            shouldPlaySound: true,
-            shouldSetBadge: true,
-            shouldShowBanner: true,
-            shouldShowList: true,
-          }),
-        });
+        try {
+          Notifications.setNotificationHandler({
+            handleNotification: async () => ({
+              shouldShowAlert: true,
+              shouldPlaySound: true,
+              shouldSetBadge: true,
+              shouldShowBanner: true,
+              shouldShowList: true,
+            }),
+          });
+        } catch (e) {
+          console.warn('Notification handler setup failed (continuing):', e);
+        }
 
         console.log('✅ App initialization complete');
       } catch (error) {
-        console.error('❌ Error initializing app:', error);
+        console.error('❌ Error initializing app (non-blocking):', error);
       }
     };
 
@@ -82,16 +100,31 @@ function RootLayoutContent() {
   }, []);
 
   const onLayoutRootView = useCallback(async () => {
-    if (fontsLoaded) {
-      await SplashScreen.hideAsync();
+    try {
+      if (fontsLoaded && !isLoading) {
+        await SplashScreen.hideAsync();
+        console.log('✅ Splash screen hidden');
+      }
+    } catch (error) {
+      console.error('Error hiding splash screen:', error);
     }
-  }, [fontsLoaded]);
+  }, [fontsLoaded, isLoading]);
 
   useEffect(() => {
-    if (fontsLoaded) {
+    if (fontsLoaded && !isLoading) {
       onLayoutRootView();
     }
-  }, [fontsLoaded, onLayoutRootView]);
+  }, [fontsLoaded, isLoading, onLayoutRootView]);
+
+  // Fallback: force splash hide after 10 seconds no matter what
+  useEffect(() => {
+    const fallbackTimer = setTimeout(() => {
+      console.warn('⚠️ Forcing splash hide after 10s timeout');
+      SplashScreen.hideAsync().catch(() => {});
+    }, 10000);
+
+    return () => clearTimeout(fallbackTimer);
+  }, []);
 
   if (!fontsLoaded || isLoading) {
     return null;
